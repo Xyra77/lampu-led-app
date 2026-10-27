@@ -59,3 +59,4 @@ CATATAN
   dicatat terpisah karena harga dari supplier dapat berbeda.
 - Sistem ini belum memakai login/otorisasi pengguna; gunakan di lingkungan
   lokal atau tambahkan autentikasi sebelum dipasang ke server publik.
+- Tolong untuk memberikan bintang agar reponya lebih dikenal.
