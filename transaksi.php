@@ -7,20 +7,21 @@ $pageTitle = 'Transaksi Penjualan';
 $errors = [];
 $kasirList = $db->query('SELECT id_kasir, nama_kasir FROM kasir ORDER BY nama_kasir')->fetchAll();
 $produkList = $db->query('SELECT id, nama_lampu, watt, harga_terendah, jumlah_stock FROM lampu_led ORDER BY nama_lampu, watt')->fetchAll();
-$metodeList = ['Tunai', 'QRIS', 'Transfer Bank', 'Kartu Debit', 'E-Wallet'];
+$metodeList = $db->query('SELECT id_metode, nama_metode FROM metode_pembayaran ORDER BY id_metode')->fetchAll();
+$pelangganList = $db->query('SELECT nama_pelanggan FROM pelanggan ORDER BY nama_pelanggan')->fetchAll();
 $defaultDate = date('Y-m-d\TH:i');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $namaPelanggan = trim($_POST['nama_pelanggan'] ?? '');
     $idKasir = (int) ($_POST['id_kasir'] ?? 0);
-    $metode = trim($_POST['metode_pembayaran'] ?? '');
+    $idMetode = (int) ($_POST['id_metode'] ?? 0);
     $tanggalInput = trim($_POST['tanggal_transaksi'] ?? '');
     $productIds = $_POST['products'] ?? [];
     $quantities = $_POST['quantities'] ?? [];
 
     if ($namaPelanggan === '') $errors[] = 'Nama pelanggan wajib diisi. Untuk pelanggan umum, isi "Umum".';
     if ($idKasir <= 0) $errors[] = 'Pilih kasir yang melayani transaksi.';
-    if (!in_array($metode, $metodeList, true)) $errors[] = 'Pilih metode pembayaran yang valid.';
+    if (!in_array($idMetode, array_map('intval', array_column($metodeList, 'id_metode')), true)) $errors[] = 'Pilih metode pembayaran yang valid.';
     $tanggal = DateTime::createFromFormat('!Y-m-d\TH:i', $tanggalInput) ?: DateTime::createFromFormat('Y-m-d\TH:i', $tanggalInput);
     if (!$tanggal) $errors[] = 'Tanggal transaksi tidak valid.';
     if (strlen($namaPelanggan) > 120) $errors[] = 'Nama pelanggan maksimal 120 karakter.';
@@ -47,6 +48,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $checkCashier->execute([':id' => $idKasir]);
             if (!$checkCashier->fetchColumn()) throw new RuntimeException('Data kasir tidak ditemukan. Muat ulang halaman dan pilih kasir yang aktif.');
 
+            // Nama pelanggan di form diubah jadi id: pakai pelanggan yang sudah ada, kalau belum ada dibuat baru.
+            $findCustomer = $db->prepare('SELECT id_pelanggan FROM pelanggan WHERE nama_pelanggan = :nama LIMIT 1');
+            $findCustomer->execute([':nama' => $namaPelanggan]);
+            $idPelanggan = (int) $findCustomer->fetchColumn();
+            if ($idPelanggan === 0) {
+                $createCustomer = $db->prepare('INSERT INTO pelanggan (nama_pelanggan) VALUES (:nama)');
+                $createCustomer->execute([':nama' => $namaPelanggan]);
+                $idPelanggan = (int) $db->lastInsertId();
+            }
+
             $preparedItems = [];
             $totalBayar = 0;
             $selectProduct = $db->prepare('SELECT id, nama_lampu, watt, harga_terendah, jumlah_stock FROM lampu_led WHERE id = :id FOR UPDATE');
@@ -60,22 +71,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $price = (int) $product['harga_terendah'];
                 $subtotal = $price * $qty;
                 $totalBayar += $subtotal;
-                $preparedItems[] = ['id' => $productId, 'nama' => $product['nama_lampu'] . ' (' . $product['watt'] . ' W)', 'harga' => $price, 'jumlah' => $qty, 'subtotal' => $subtotal];
+                $preparedItems[] = ['id' => $productId, 'harga' => $price, 'jumlah' => $qty, 'subtotal' => $subtotal];
             }
 
-            $insertHeader = $db->prepare('INSERT INTO transaksi (tanggal_transaksi, nama_pelanggan, id_kasir, metode_pembayaran, total_bayar) VALUES (:tanggal, :pelanggan, :kasir, :metode, :total)');
+            $insertHeader = $db->prepare('INSERT INTO transaksi (tanggal_transaksi, id_pelanggan, id_kasir, id_metode, total_bayar) VALUES (:tanggal, :pelanggan, :kasir, :metode, :total)');
             $insertHeader->execute([
                 ':tanggal' => $tanggal->format('Y-m-d H:i:s'),
-                ':pelanggan' => $namaPelanggan,
+                ':pelanggan' => $idPelanggan,
                 ':kasir' => $idKasir,
-                ':metode' => $metode,
+                ':metode' => $idMetode,
                 ':total' => $totalBayar,
             ]);
             $transactionId = (int) $db->lastInsertId();
-            $insertDetail = $db->prepare('INSERT INTO transaksi_detail (id_transaksi, id_lampu, nama_produk, harga_satuan, jumlah_produk, subtotal) VALUES (:transaksi, :lampu, :nama, :harga, :jumlah, :subtotal)');
+            $insertDetail = $db->prepare('INSERT INTO transaksi_detail (id_transaksi, id_lampu, harga_satuan, jumlah_produk, subtotal) VALUES (:transaksi, :lampu, :harga, :jumlah, :subtotal)');
             $decrementStock = $db->prepare('UPDATE lampu_led SET jumlah_stock = jumlah_stock - :jumlah_set WHERE id = :id AND jumlah_stock >= :jumlah_check');
             foreach ($preparedItems as $item) {
-                $insertDetail->execute([':transaksi' => $transactionId, ':lampu' => $item['id'], ':nama' => $item['nama'], ':harga' => $item['harga'], ':jumlah' => $item['jumlah'], ':subtotal' => $item['subtotal']]);
+                $insertDetail->execute([':transaksi' => $transactionId, ':lampu' => $item['id'], ':harga' => $item['harga'], ':jumlah' => $item['jumlah'], ':subtotal' => $item['subtotal']]);
                 $decrementStock->execute([':jumlah_set' => $item['jumlah'], ':jumlah_check' => $item['jumlah'], ':id' => $item['id']]);
                 if ($decrementStock->rowCount() !== 1) throw new RuntimeException('Stok berubah saat transaksi berlangsung. Silakan ulangi transaksi.');
             }
@@ -107,10 +118,10 @@ require_once 'templates/header.php';
 <section class="card">
 <form method="POST" id="sale-form">
     <div class="form-grid">
-        <div class="form-group"><label for="nama_pelanggan">Nama Pelanggan</label><input type="text" id="nama_pelanggan" name="nama_pelanggan" maxlength="120" value="<?= e($_POST['nama_pelanggan'] ?? 'Umum') ?>" required></div>
+        <div class="form-group"><label for="nama_pelanggan">Nama Pelanggan</label><input type="text" id="nama_pelanggan" name="nama_pelanggan" maxlength="120" list="daftar-pelanggan" autocomplete="off" value="<?= e($_POST['nama_pelanggan'] ?? 'Umum') ?>" required><datalist id="daftar-pelanggan"><?php foreach ($pelangganList as $pelanggan): ?><option value="<?= e($pelanggan['nama_pelanggan']) ?>"><?php endforeach; ?></datalist></div>
         <div class="form-group"><label for="id_kasir">Nama Kasir</label><select id="id_kasir" name="id_kasir" required><option value="">Pilih kasir</option><?php foreach ($kasirList as $kasir): ?><option value="<?= (int)$kasir['id_kasir'] ?>" <?= (int)($_POST['id_kasir'] ?? 0) === (int)$kasir['id_kasir'] ? 'selected' : '' ?>><?= e($kasir['nama_kasir']) ?></option><?php endforeach; ?></select></div>
         <div class="form-group"><label for="tanggal_transaksi">Tanggal Transaksi</label><input type="datetime-local" id="tanggal_transaksi" name="tanggal_transaksi" value="<?= e($_POST['tanggal_transaksi'] ?? $defaultDate) ?>" required></div>
-        <div class="form-group"><label for="metode_pembayaran">Metode Pembayaran</label><select id="metode_pembayaran" name="metode_pembayaran" required><option value="">Pilih metode</option><?php foreach ($metodeList as $metode): ?><option value="<?= e($metode) ?>" <?= ($_POST['metode_pembayaran'] ?? '') === $metode ? 'selected' : '' ?>><?= e($metode) ?></option><?php endforeach; ?></select></div>
+        <div class="form-group"><label for="metode_pembayaran">Metode Pembayaran</label><select id="metode_pembayaran" name="id_metode" required><option value="">Pilih metode</option><?php foreach ($metodeList as $metode): ?><option value="<?= (int)$metode['id_metode'] ?>" <?= (int)($_POST['id_metode'] ?? 0) === (int)$metode['id_metode'] ? 'selected' : '' ?>><?= e($metode['nama_metode']) ?></option><?php endforeach; ?></select></div>
     </div>
     <div class="section-heading"><div><h2>Produk yang Dibeli</h2><p>Harga satuan diambil dari katalog produk.</p></div><button type="button" class="btn btn-secondary" data-add-line="sales-lines" data-template="sales-line-template">+ Tambah Produk</button></div>
     <div class="line-items" id="sales-lines" data-line-collection data-total-target="#sale-total">

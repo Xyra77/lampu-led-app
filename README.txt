@@ -31,6 +31,7 @@ pengadaan.php              => form pengadaan dan riwayat pembelian
 detail_pengadaan.php       => rincian barang dan harga satuan pembelian
 database.sql               => instalasi baru, termasuk data awal 96 lampu LED
 upgrade.sql                => migrasi dari versi katalog lama
+upgrade_relasi.sql         => migrasi dari versi transaksi lama (pelanggan, metode, produk jadi relasi id)
 
 CARA INSTALASI BARU (XAMPP / LARAGON)
 -------------------------------------
@@ -51,6 +52,13 @@ UPGRADE DARI VERSI LAMA
 2. Impor upgrade.sql satu kali lewat phpMyAdmin. File ini menambah kolom stok
    dan tabel baru tanpa menghapus 96 data produk yang sudah ada.
 3. Ganti file aplikasi dengan versi ini, lalu buka kembali di browser.
+
+UPGRADE RELASI (pelanggan, metode pembayaran, produk)
+-----------------------------------------------------
+Jika database kamu sudah punya tabel transaksi versi sebelumnya (nama pelanggan dan metode
+pembayaran masih teks), cadangkan database lalu impor upgrade_relasi.sql satu kali. Data
+transaksi lama otomatis dipindah ke tabel pelanggan dan metode_pembayaran. Kolom nama_produk
+di transaksi_detail dan pembelian_detail dihapus, nama produk diambil dari lampu_led lewat id_lampu.
 
 CATATAN
 -------

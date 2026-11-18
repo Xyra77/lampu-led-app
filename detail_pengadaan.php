@@ -9,7 +9,7 @@ $stmt = $db->prepare('SELECT p.*, s.nama_supplier, s.no_telepon, s.alamat FROM p
 $stmt->execute([':id' => $id]);
 $purchase = $stmt->fetch();
 if (!$purchase) redirectWithFlash('pengadaan.php', 'error', 'Data pengadaan tidak ditemukan.');
-$stmt = $db->prepare('SELECT * FROM pembelian_detail WHERE id_pembelian = :id ORDER BY id_detail_pembelian');
+$stmt = $db->prepare("SELECT pd.*, CONCAT(l.nama_lampu, ' (', l.watt, ' W)') AS nama_produk FROM pembelian_detail pd JOIN lampu_led l ON l.id = pd.id_lampu WHERE pd.id_pembelian = :id ORDER BY pd.id_detail_pembelian");
 $stmt->execute([':id' => $id]);
 $items = $stmt->fetchAll();
 $pageTitle = 'Detail Pengadaan #' . $id;

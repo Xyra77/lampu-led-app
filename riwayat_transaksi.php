@@ -4,14 +4,17 @@ require_once 'config/helpers.php';
 $database = new Database();
 $db = $database->getConnection();
 $pageTitle = 'Riwayat Transaksi';
-$query = "SELECT t.id_transaksi, t.tanggal_transaksi, t.nama_pelanggan, t.metode_pembayaran, t.total_bayar,
-    k.nama_kasir,
-    GROUP_CONCAT(CONCAT(td.nama_produk, ' × ', td.jumlah_produk) ORDER BY td.id_detail SEPARATOR ', ') AS daftar_produk,
+$query = "SELECT t.id_transaksi, t.tanggal_transaksi, t.total_bayar,
+    pl.nama_pelanggan, mp.nama_metode AS metode_pembayaran, k.nama_kasir,
+    GROUP_CONCAT(CONCAT(l.nama_lampu, ' (', l.watt, ' W) × ', td.jumlah_produk) ORDER BY td.id_detail SEPARATOR ', ') AS daftar_produk,
     COALESCE(SUM(td.jumlah_produk), 0) AS total_produk
     FROM transaksi t
+    JOIN pelanggan pl ON pl.id_pelanggan = t.id_pelanggan
+    JOIN metode_pembayaran mp ON mp.id_metode = t.id_metode
     JOIN kasir k ON k.id_kasir = t.id_kasir
     LEFT JOIN transaksi_detail td ON td.id_transaksi = t.id_transaksi
-    GROUP BY t.id_transaksi, t.tanggal_transaksi, t.nama_pelanggan, t.metode_pembayaran, t.total_bayar, k.nama_kasir
+    LEFT JOIN lampu_led l ON l.id = td.id_lampu
+    GROUP BY t.id_transaksi, t.tanggal_transaksi, t.total_bayar, pl.nama_pelanggan, mp.nama_metode, k.nama_kasir
     ORDER BY t.id_transaksi DESC LIMIT 100";
 $transactions = $db->query($query)->fetchAll();
 $totalHariIni = (int) $db->query('SELECT COALESCE(SUM(total_bayar), 0) FROM transaksi WHERE DATE(tanggal_transaksi) = CURDATE()')->fetchColumn();

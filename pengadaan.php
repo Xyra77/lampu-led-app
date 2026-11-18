@@ -51,16 +51,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$product) throw new RuntimeException('Salah satu produk tidak ditemukan.');
                 $subtotal = $item['jumlah'] * $item['harga'];
                 $totalHarga += $subtotal;
-                $preparedItems[] = ['id' => $item['id'], 'nama' => $product['nama_lampu'] . ' (' . $product['watt'] . ' W)', 'jumlah' => $item['jumlah'], 'harga' => $item['harga'], 'subtotal' => $subtotal];
+                $preparedItems[] = ['id' => $item['id'], 'jumlah' => $item['jumlah'], 'harga' => $item['harga'], 'subtotal' => $subtotal];
             }
 
             $insertHeader = $db->prepare('INSERT INTO pembelian (tanggal_pembelian, id_supplier, total_harga) VALUES (:tanggal, :supplier, :total)');
             $insertHeader->execute([':tanggal' => $tanggal->format('Y-m-d H:i:s'), ':supplier' => $idSupplier, ':total' => $totalHarga]);
             $purchaseId = (int) $db->lastInsertId();
-            $insertDetail = $db->prepare('INSERT INTO pembelian_detail (id_pembelian, id_lampu, nama_produk, jumlah, harga_satuan, subtotal) VALUES (:pembelian, :lampu, :nama, :jumlah, :harga, :subtotal)');
+            $insertDetail = $db->prepare('INSERT INTO pembelian_detail (id_pembelian, id_lampu, jumlah, harga_satuan, subtotal) VALUES (:pembelian, :lampu, :jumlah, :harga, :subtotal)');
             $incrementStock = $db->prepare('UPDATE lampu_led SET jumlah_stock = jumlah_stock + :jumlah WHERE id = :id');
             foreach ($preparedItems as $item) {
-                $insertDetail->execute([':pembelian' => $purchaseId, ':lampu' => $item['id'], ':nama' => $item['nama'], ':jumlah' => $item['jumlah'], ':harga' => $item['harga'], ':subtotal' => $item['subtotal']]);
+                $insertDetail->execute([':pembelian' => $purchaseId, ':lampu' => $item['id'], ':jumlah' => $item['jumlah'], ':harga' => $item['harga'], ':subtotal' => $item['subtotal']]);
                 $incrementStock->execute([':jumlah' => $item['jumlah'], ':id' => $item['id']]);
             }
             $db->commit();
@@ -73,11 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $historyQuery = "SELECT p.id_pembelian, p.tanggal_pembelian, p.total_harga, s.nama_supplier,
-    GROUP_CONCAT(CONCAT(pd.nama_produk, ' × ', pd.jumlah) ORDER BY pd.id_detail_pembelian SEPARATOR ', ') AS daftar_barang,
+    GROUP_CONCAT(CONCAT(l.nama_lampu, ' (', l.watt, ' W) × ', pd.jumlah) ORDER BY pd.id_detail_pembelian SEPARATOR ', ') AS daftar_barang,
     COALESCE(SUM(pd.jumlah), 0) AS total_jumlah
     FROM pembelian p
     JOIN supplier s ON s.id_supplier = p.id_supplier
     LEFT JOIN pembelian_detail pd ON pd.id_pembelian = p.id_pembelian
+    LEFT JOIN lampu_led l ON l.id = pd.id_lampu
     GROUP BY p.id_pembelian, p.tanggal_pembelian, p.total_harga, s.nama_supplier
     ORDER BY p.id_pembelian DESC LIMIT 100";
 $history = $db->query($historyQuery)->fetchAll();
@@ -119,7 +120,7 @@ require_once 'templates/header.php';
             <div class="muted">Subtotal: <strong data-line-subtotal>Rp 0</strong></div>
         </div></template>
         <div class="form-layout">
-            <div class="muted">Nama barang dan nama produk disimpan sebagai snapshot di detail pengadaan, beserta jumlah, harga satuan, dan subtotal.</div>
+            <div class="muted">Detail pengadaan menyimpan id produk (nama produk ditampilkan dari katalog), beserta jumlah, harga satuan, dan subtotal.</div>
             <div class="total-panel"><span>Total Harga Pembelian</span><strong id="purchase-total">Rp 0</strong><div class="form-actions"><button type="submit" class="btn btn-primary" <?= !$supplierList ? 'disabled' : '' ?>>Simpan Pengadaan</button><a href="pengadaan.php" class="btn btn-ghost">Reset</a></div></div>
         </div>
     </form>

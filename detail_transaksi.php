@@ -5,11 +5,11 @@ $database = new Database();
 $db = $database->getConnection();
 $id = (int) ($_GET['id'] ?? 0);
 if ($id <= 0) redirectWithFlash('riwayat_transaksi.php', 'error', 'ID transaksi tidak valid.');
-$stmt = $db->prepare('SELECT t.*, k.nama_kasir FROM transaksi t JOIN kasir k ON k.id_kasir = t.id_kasir WHERE t.id_transaksi = :id');
+$stmt = $db->prepare('SELECT t.*, k.nama_kasir, pl.nama_pelanggan, mp.nama_metode FROM transaksi t JOIN kasir k ON k.id_kasir = t.id_kasir JOIN pelanggan pl ON pl.id_pelanggan = t.id_pelanggan JOIN metode_pembayaran mp ON mp.id_metode = t.id_metode WHERE t.id_transaksi = :id');
 $stmt->execute([':id' => $id]);
 $transaction = $stmt->fetch();
 if (!$transaction) redirectWithFlash('riwayat_transaksi.php', 'error', 'Transaksi tidak ditemukan.');
-$stmt = $db->prepare('SELECT * FROM transaksi_detail WHERE id_transaksi = :id ORDER BY id_detail');
+$stmt = $db->prepare("SELECT td.*, CONCAT(l.nama_lampu, ' (', l.watt, ' W)') AS nama_produk FROM transaksi_detail td JOIN lampu_led l ON l.id = td.id_lampu WHERE td.id_transaksi = :id ORDER BY td.id_detail");
 $stmt->execute([':id' => $id]);
 $items = $stmt->fetchAll();
 $pageTitle = 'Detail Transaksi #' . $id;
@@ -19,7 +19,7 @@ require_once 'templates/header.php';
 <section class="card">
     <div class="form-grid">
         <ul class="summary-list"><li><span>ID Transaksi</span><strong>#<?= (int)$transaction['id_transaksi'] ?></strong></li><li><span>Tanggal Transaksi</span><strong><?= e(date('d-m-Y H:i', strtotime($transaction['tanggal_transaksi']))) ?></strong></li><li><span>Nama Pelanggan</span><strong><?= e($transaction['nama_pelanggan']) ?></strong></li></ul>
-        <ul class="summary-list"><li><span>Nama Kasir</span><strong><?= e($transaction['nama_kasir']) ?></strong></li><li><span>Metode Pembayaran</span><strong><?= e($transaction['metode_pembayaran']) ?></strong></li><li><span>Total Bayar</span><strong><?= e(rupiah($transaction['total_bayar'])) ?></strong></li></ul>
+        <ul class="summary-list"><li><span>Nama Kasir</span><strong><?= e($transaction['nama_kasir']) ?></strong></li><li><span>Metode Pembayaran</span><strong><?= e($transaction['nama_metode']) ?></strong></li><li><span>Total Bayar</span><strong><?= e(rupiah($transaction['total_bayar'])) ?></strong></li></ul>
     </div>
 </section>
 <section class="card"><h2>Rincian Produk</h2><div class="table-wrap"><table><thead><tr><th>Nama Produk</th><th>Harga Satuan</th><th>Jumlah Produk</th><th>Subtotal</th></tr></thead><tbody>

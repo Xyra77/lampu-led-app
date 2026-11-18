@@ -52,7 +52,7 @@ require_once "templates/header.php";
                 </option>
             <?php endforeach; ?>
         </select>
-        <button type="submit" class="btn btn-secondary">Filter</button>
+        <button type="submit" class="btn btn-secondary">Cari</button>
         <a href="index.php" class="btn btn-ghost">Reset</a>
         <a href="create.php" class="btn btn-primary btn-add">+ Tambah Data</a>
     </form>
